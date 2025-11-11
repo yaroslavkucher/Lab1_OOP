@@ -1,0 +1,36 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+xmlns:local="clr-namespace:SheetsApp"
+x:Class="SheetsApp.MainPage">
+    
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+        <StackLayout Orientation="Horizontal" HorizontalOptions="Center">
+            <Button Text="Save" Clicked="SaveButton_Clicked" />
+            <Button Text="New" Clicked="CreateButton_Clicked" />
+            <Button Text="Open" Clicked="ReadButton_Clicked" />
+            <Button Text="Delete row" Clicked="DeleteRowButton_Clicked" />
+            <Button Text="Delete column" Clicked="DeleteColumnButton_Clicked" />
+            <Button Text="Add row" Clicked="AddRowButton_Clicked" />
+            <Button Text="Add column" Clicked="AddColumnButton_Clicked" />
+            <Button Text="About" Clicked="HelpButton_Clicked" />
+            <Button Text="Exit" Clicked="ExitButton_Clicked" />
+        </StackLayout>
+        <Entry x:Name="textInput" TextChanged="OnTextInputTextChanged" Grid.Row="1" Placeholder="Введіть вираз"/>
+
+        <ScrollView Grid.Row="2" Grid.ColumnSpan="2" Orientation="Both">
+            <Grid x:Name="grid">
+            </Grid>
+        </ScrollView>
+    </Grid>
+</ContentPage>
+    
+   
