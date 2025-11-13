@@ -48,14 +48,15 @@ namespace SheetsApp.Tests
 
             var visitor = new SheetsAppVisitor(cells);
 
-            var exception = Assert.Throws<Exception>(() => visitor.Eval(cellA));
+            var exception = Assert.Throws<CycleException>(() => visitor.Eval(cellA));
             Assert.Contains("Циклічне посилання", exception.Message);
         }
 
         [Fact]
         public void Eval_ShouldRespectOrderOfOperations()
         {
-            var cell = new Cell("A1", "3 + 2 * 4 - 5 / (1 + 1) ^ 2"); // (1+1)^2 -> 5/(1+1)^2 -> 2*4 -> 3+8-1.25 = 9.75
+            var cell = new Cell("A1", "=not(inc(3 + 2 * 4 - 5 / (1 + 1))>15)=1"); // (1+1)=2 => 5/2=2.5 => 2*4=8 => 3+8=11 => 11-2.5=8.5 =>
+                                                                                  // inc(8.5)=9.5 => 9.5>15=0 => not(0)=1 => 1=1
 
             var cells = new Dictionary<(int, int), Cell>
             {
@@ -66,7 +67,7 @@ namespace SheetsApp.Tests
 
             double result = visitor.Eval(cell);
 
-            Assert.Equal(9.75, result, precision: 2);
+            Assert.Equal(1, result, precision: 2);
         }
     }
 }
