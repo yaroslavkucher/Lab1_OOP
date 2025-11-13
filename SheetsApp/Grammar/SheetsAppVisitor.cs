@@ -7,20 +7,13 @@ namespace SheetsApp
     {
         public static readonly ThrowingErrorListener Instance = new ThrowingErrorListener();
 
-        // --- 1. Метод для ПАРСЕРА ---
-        // Цей метод успадковується від BaseErrorListener (для IAntlrErrorListener<IToken>)
         public override void SyntaxError(TextWriter output, IRecognizer recognizer, IToken offendingSymbol, int line, int charPositionInLine, string msg, RecognitionException e)
         {
-            // "hello" або "A1+" викличе цю помилку
             throw new Exception($"Помилка синтаксису (парсер): {msg}");
         }
 
-        // --- 2. Метод для ЛЕКСЕРА ---
-        // Цей метод реалізує IAntlrErrorListener<int>
-        // Зверніть увагу на 'int offendingSymbol' замість 'IToken offendingSymbol'
         public void SyntaxError(TextWriter output, IRecognizer recognizer, int offendingSymbol, int line, int charPositionInLine, string msg, RecognitionException e)
         {
-            // Невідомий символ, наприклад '?' або '$', викличе цю помилку
             throw new Exception($"Помилка синтаксису (лексер): {msg}");
         }
     }
@@ -190,63 +183,48 @@ namespace SheetsApp
             visiting.Add(cellName);
             try
             {
-                double result = Eval(cell);
+                double result;
+                try
+                {
+                    result = Eval(cell);
+                }
+                catch (Exception ex)
+                {
+                    if (ex is CycleException || ex is CellNotFoundException)
+                    {
+                        throw;
+                    }
+
+                    if (string.IsNullOrEmpty(cell.Expression))
+                    {
+                        result = 0.0;
+                    }
+
+                    else if (double.TryParse(cell.Expression, System.Globalization.NumberStyles.Float,
+                             System.Globalization.CultureInfo.InvariantCulture, out double numericResult))
+                    {
+                        result = numericResult;
+                    }
+
+                    else
+                    {
+                        throw;
+                    }
+                }
+
                 evaluatedValues[cellName] = result;
                 return result;
             }
             catch
             {
-                evaluatedValues[cellName] = double.NaN; 
+                evaluatedValues[cellName] = double.NaN;
                 throw;
             }
             finally
             {
                 visiting.Remove(cellName);
             }
-
         }
-
-        /*public override double VisitCellExpr(SheetsParser.CellExprContext context)
-        {
-            string cellName = context.GetText();
-            var cell = cells.Find(c => c.Name == cellName);
-
-            if (cell == null)
-            {
-                throw new CellNotFoundException($"Клітина {cellName} не знайдена");
-            }
-
-            if (currentCell != null && !cell.Dependents.Contains(currentCell))
-            {
-                cell.Dependents.Add(currentCell);
-            }
-
-            // --- НОВА СПРОЩЕНА ЛОГІКА ---
-
-            // Ми не викликаємо Eval() рекурсивно.
-            // Ми просто беремо поточне значення комірки.
-
-            if (visiting.Contains(cellName))
-            {
-                throw new CycleException($"Циклічне посилання на {cellName}");
-            }
-
-            // Перевіряємо, чи можна поточне ЗНАЧЕННЯ комірки
-            // перетворити на число.
-            if (double.TryParse(cell.Value, System.Globalization.NumberStyles.Float,
-                     System.Globalization.CultureInfo.InvariantCulture, out double result))
-            {
-                // Успіх, "5" -> 5.0
-                return result;
-            }
-            else
-            {
-                // Значення - це текст ("hello", "" або "#ERROR").
-                // У формулах (напр., =A1+5) це обробляється як 0.
-                return 0.0;
-            }
-        }*/
-
         public override double VisitNumberExpr(SheetsParser.NumberExprContext context)
         {
             string text = context.GetText().Replace(',', '.');
@@ -257,8 +235,6 @@ namespace SheetsApp
                 return result;
             }
             throw new Exception("Не вдалося розпарсити як число.");
-            /*IsLastResultLogical = false;
-            return 0;*/
         }
 
     }

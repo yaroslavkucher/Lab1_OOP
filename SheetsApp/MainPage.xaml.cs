@@ -1,10 +1,9 @@
-﻿using ClosedXML.Excel;
-
-using Grid = Microsoft.Maui.Controls.Grid;
-
+﻿using Antlr4.Runtime;
+using ClosedXML.Excel;
 using CommunityToolkit.Maui.Storage;
-using Microsoft.Maui.Graphics.Text;
 using Microsoft.Maui;
+using Microsoft.Maui.Graphics.Text;
+using Grid = Microsoft.Maui.Controls.Grid;
 
 namespace SheetsApp
 {
@@ -79,28 +78,10 @@ namespace SheetsApp
             return null;
         }
 
-        /*private string FormatForDisplay(string value)
-        {
-            if (value == null)
-                return "False";
-
-            if (value == "")
-                return "";
-
-            if (value is string s && s == "#ERROR")
-                return "#ERROR";
-
-            if (double.TryParse(value, out double d))
-                return d != 0 ? "True" : "False";
-
-            return "False";
-        }*/
-
         private string FormatForDisplay(string value)
         {
             return value;
         }
-
 
         private string GetColumnName(int colIndex)
         {
@@ -118,16 +99,6 @@ namespace SheetsApp
         private string GetCellName(int row, int column)
         {
             return GetColumnName(column) + row.ToString();
-        }
-        private int GetColumnIndex(string columnName)
-        {
-            int columnIndex = 0;
-            for (int i = 0; i < columnName.Length; i++)
-            {
-                columnIndex *= 26;
-                columnIndex += (columnName[i] - 'A' + 1);
-            }
-            return columnIndex;
         }
         private void RemoveGridElements(Func<Microsoft.Maui.IView, bool> matchCondition)
         {
@@ -154,7 +125,6 @@ namespace SheetsApp
                 {
                     if (child is Label label)
                     {
-                        // Оновлюємо текст, ТІЛЬКИ якщо це заголовок рядка (у стовпці 0)
                         if (grid.GetColumn(label) == 0)
                         {
                             label.Text = (currentRow + 1).ToString();
@@ -164,124 +134,20 @@ namespace SheetsApp
                 }
             }
 
-            // *** ВИПРАВЛЕННЯ №1: Використовуємо .Insert, а не .Add ***
             grid.RowDefinitions.Insert(newRow, new RowDefinition { Height = GridLength.Auto });
 
-            // Створюємо новий заголовок рядка
             var rowLabel = CreateLabel(newRow.ToString(), newRow, 0);
             grid.Children.Add(rowLabel);
 
-            // *** ВИПРАВЛЕННЯ №2: Правильний цикл для створення комірок ***
-            // Починаємо зі стовпця 1 (бо стовпець 0 - це заголовки)
             for (int col = 1; col < grid.ColumnDefinitions.Count; col++)
             {
-                var entry = CreateCellEntry(newRow, col); // Використовуємо 'col', а не 'col + 1'
+                var entry = CreateCellEntry(newRow, col);
                 grid.Children.Add(entry);
             }
             isDirty = true;
+
+            RecalculateAllValues();
         }
-        /*{
-            foreach (var child in grid.Children)
-            {
-                int currentRow = grid.GetRow(child);
-                if (currentRow >= newRow)
-                {
-                    if (child is Label label)
-                    {
-                        label.Text = (currentRow + 1).ToString();
-                    }
-                    grid.SetRow(child, currentRow + 1);
-                }
-            }
-
-            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-
-            var rowLabel = CreateLabel(newRow.ToString(), newRow, 0);
-            grid.Children.Add(rowLabel);
-
-            for (int col = 0; col < grid.ColumnDefinitions.Count; col++)
-            {
-                var entry = CreateCellEntry(newRow, col + 1);
-                grid.Children.Add(entry);
-            }
-            isDirty = true;
-
-        }*/
-        /*private void UpdateDependants(Cell cell)
-        {
-            foreach (var dependant in cell.Dependents)
-            {
-                if (visiting.Contains(dependant.Name))
-                    continue;
-
-                visiting.Add(dependant.Name);
-                try
-                {
-                    if (cell.Value == "#ERROR" && dependant.Expression.Contains(cell.Name))
-                    {
-                        dependant.Value = "#ERROR";
-                    }
-                    else
-                    {
-                        var visitor = new SheetsAppVisitor(cells); // Створюємо візитор
-                        double numericValue = visitor.Eval(dependant); // Отримуємо значення
-
-                        // Перевіряємо, чи була це логічна операція
-                        if (visitor.IsLastResultLogical)
-                        {
-                            dependant.Value = (numericValue != 0) ? "ІСТИНА" : "ХИБА";
-                        }
-                        else
-                        {
-                            // Інакше, це просто число
-                            dependant.Value = numericValue.ToString(System.Globalization.CultureInfo.InvariantCulture);
-                        }
-                    }
-
-                    var dependantCoords = cells.FirstOrDefault(kv => kv.Value == dependant).Key;
-                    /*try
-                    {
-                        if (cell.Value == "#ERROR" && dependant.Expression.Contains(cell.Name))
-                        {
-                            dependant.Value = "#ERROR";
-                        }
-                        else
-                        {
-                            dependant.Value = new SheetsAppVisitor(cells).Eval(dependant).ToString();
-                        }
-
-                        var dependantCoords = cells.FirstOrDefault(kv => kv.Value == dependant).Key;
-                    var entry = GetEntryAt(dependantCoords.Item1, dependantCoords.Item2);
-                    if (entry != null)
-                    {
-                        entry.TextChanged -= OnEntryTextChanged;
-                        entry.Text = FormatForDisplay(dependant.Value); ;
-                        entry.TextChanged += OnEntryTextChanged;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    if (dependant.Expression.Contains(cell.Name))
-                    {
-                        dependant.Value = "#ERROR";
-
-                        var dependantCoords = cells.FirstOrDefault(kv => kv.Value == dependant).Key;
-                        var entry = GetEntryAt(dependantCoords.Item1, dependantCoords.Item2);
-                        if (entry != null)
-                        {
-                            entry.TextChanged -= OnEntryTextChanged;
-                            entry.Text = dependant.Value;
-                            entry.TextChanged += OnEntryTextChanged;
-                        }
-                    }
-                }
-
-                UpdateDependants(dependant);
-
-                visiting.Remove(dependant.Name);
-            }
-        }*/
-
         private void UpdateDependants(Cell cell)
         {
             foreach (var dependant in cell.Dependents)
@@ -292,43 +158,58 @@ namespace SheetsApp
                 visiting.Add(dependant.Name);
                 try
                 {
-                    if (cell.Value == "#ERROR" && dependant.Expression.Contains(cell.Name))
+                    var visitor = new SheetsAppVisitor(cells);
+                    double numericValue = visitor.Eval(dependant);
+
+                    if (visitor.IsLastResultLogical)
                     {
-                        dependant.Value = "#ERROR";
+                        dependant.Value = (numericValue != 0) ? "ІСТИНА" : "ХИБА";
                     }
                     else
                     {
-                        var visitor = new SheetsAppVisitor(cells);
-                        double numericValue = visitor.Eval(dependant);
-
-                        if (visitor.IsLastResultLogical)
-                        {
-                            dependant.Value = (numericValue != 0) ? "ІСТИНА" : "ХИБА";
-                        }
-                        else
-                        {
-                            dependant.Value = numericValue.ToString(System.Globalization.CultureInfo.InvariantCulture);
-                        }
+                        dependant.Value = numericValue.ToString(System.Globalization.CultureInfo.InvariantCulture);
                     }
                 }
-                catch (CycleException ex) // <-- ДОДАЙТЕ ЦЕЙ БЛОК
+                catch (CycleException ex)
                 {
                     dependant.Value = "#ERROR";
                 }
-                catch (CellNotFoundException ex) // <-- Додайте і це про всяк випадок
+                catch (CellNotFoundException ex)
                 {
                     dependant.Value = "#REF_ERROR";
                 }
-                catch (Exception ex) // <-- ВИПРАВЛЕННЯ ТУТ
+                catch (Exception ex)
                 {
-                    // Якщо парсер кинув помилку, це текст (напр., "hello")
-                    // АБО це посилання (B1), яке парсер не зрозумів.
-                    // У будь-якому випадку, показуємо вираз.
-                    dependant.Value = dependant.Expression;
-                }
-                // --- КІНЕЦЬ ОНОВЛЕННЯ ---
+                    bool handledAsRef = false;
+                    try
+                    {
+                        var lexer = new SheetsLexer(new AntlrInputStream(dependant.Expression));
+                        var tokens = new CommonTokenStream(lexer);
+                        var parser = new SheetsParser(tokens);
+                        parser.RemoveErrorListeners();
+                        var tree = parser.expression();
 
-                // Цей код тепер оновлює UI незалежно від результату try...catch
+                        if (tree is SheetsParser.CellExprContext cellCtx)
+                        {
+                            string cellName = cellCtx.GetText();
+                            var referencedCell = cells.Values.FirstOrDefault(c => c.Name == cellName);
+                            if (referencedCell != null)
+                            {
+                                dependant.Value = referencedCell.Value;
+                                handledAsRef = true;
+                            }
+                        }
+                    }
+                    catch
+                    {
+                    }
+
+                    if (!handledAsRef)
+                    {
+                        dependant.Value = dependant.Expression;
+                    }
+                }
+
                 var dependantCoords = cells.FirstOrDefault(kv => kv.Value == dependant).Key;
                 var entry = GetEntryAt(dependantCoords.Item1, dependantCoords.Item2);
                 if (entry != null)
@@ -352,9 +233,12 @@ namespace SheetsApp
             textInput.Text = cell.Expression;
             textInput.TextChanged += OnTextInputTextChanged;
         }
+
         private async void OnEntryUnfocused(object sender, FocusEventArgs e)
         {
-            var cell = cells[(grid.GetRow(lastEntryFocused), grid.GetColumn(lastEntryFocused))];
+
+            var entryLosingFocus = (Entry)sender;
+            var cell = cells[(grid.GetRow(entryLosingFocus), grid.GetColumn(entryLosingFocus))];
 
             foreach (var otherCell in cells.Values)
             {
@@ -369,17 +253,14 @@ namespace SheetsApp
             {
                 try
                 {
-                    // Отримуємо числове значення (0 або 1 для логіки)
                     double numericValue = visitor.Eval(cell);
 
-                    // Перевіряємо, чи була це логічна операція
                     if (visitor.IsLastResultLogical)
                     {
                         cell.Value = (numericValue != 0) ? "ІСТИНА" : "ХИБА";
                     }
                     else
                     {
-                        // Інакше, це просто число
                         cell.Value = numericValue.ToString(System.Globalization.CultureInfo.InvariantCulture);
                     }
                 }
@@ -393,60 +274,55 @@ namespace SheetsApp
                 }
                 catch (CellNotFoundException ex)
                 {
-                    // Це семантична помилка (неіснуюча комірка)
                     if (cell.Value != "#REF_ERROR")
                     {
                         await DisplayAlert("Помилка", ex.Message, "OK");
                     }
                     cell.Value = "#REF_ERROR";
                 }
-                // --- ---
                 catch (Exception ex)
                 {
-                    // Це синтаксична помилка або просто текст ("hello", "A1+")
-                    cell.Value = cell.Expression;
+
+                    bool handledAsRef = false;
+                    try
+                    {
+                        var lexer = new SheetsLexer(new AntlrInputStream(cell.Expression));
+                        var tokens = new CommonTokenStream(lexer);
+                        var parser = new SheetsParser(tokens);
+                        parser.RemoveErrorListeners();
+                        var tree = parser.expression();
+
+                        if (tree is SheetsParser.CellExprContext cellCtx)
+                        {
+                            string cellName = cellCtx.GetText();
+                            var referencedCell = cells.Values.FirstOrDefault(c => c.Name == cellName);
+                            if (referencedCell != null)
+                            {
+                                cell.Value = referencedCell.Value;
+                                handledAsRef = true;
+                            }
+                        }
+                    }
+                    catch
+                    {
+                    }
+
+                    if (!handledAsRef)
+                    {
+                        cell.Value = cell.Expression;
+                    }
                 }
-                /*catch (Exception ex)
-                {
-                    cell.Value = "#ERROR";
-                }*/
             }
             else
             {
-                // Якщо вираз став порожнім, значення
-                // комірки також має стати порожнім.
                 cell.Value = "";
             }
 
-            /*var visitor = new SheetsAppVisitor(cells);
-            if (cell.Expression != "")
-            {
-                try
-                {
-                    cell.Value = visitor.Eval(cell).ToString();
-                }
-                catch (CycleException ex)
-                {
-                    if (cell.Value != "#ERROR")
-                    {
-                        await DisplayAlert("Помилка", ex.Message, "OK");
-                        cell.Value = "#ERROR";
-                    }
-                }
-                catch (Exception ex)
-                {
-                    cell.Value = "#ERROR";
-                }
-            }*/
-
-
-
             UpdateDependants(cell);
 
-            lastEntryFocused.TextChanged -= OnEntryTextChanged;
-            lastEntryFocused.Text = FormatForDisplay(cell.Value);
-            lastEntryFocused.TextChanged += OnEntryTextChanged;
-
+            entryLosingFocus.TextChanged -= OnEntryTextChanged;
+            entryLosingFocus.Text = FormatForDisplay(cell.Value);
+            entryLosingFocus.TextChanged += OnEntryTextChanged;
         }
         private void OnEntryTextChanged(object sender, TextChangedEventArgs e)
         {
@@ -460,7 +336,6 @@ namespace SheetsApp
             lastEntryFocused.Text = e.NewTextValue;
             var cell = cells[(grid.GetRow(lastEntryFocused), grid.GetColumn(lastEntryFocused))];
             cell.Expression = e.NewTextValue;
-            //cell.Value = e.NewTextValue;
 
         }
         void AddColumn(int newColumn)
@@ -472,7 +347,6 @@ namespace SheetsApp
                 {
                     if (child is Label label)
                     {
-                        // Оновлюємо текст, ТІЛЬКИ якщо це заголовок стовпця (у рядку 0)
                         if (grid.GetRow(label) == 0)
                         {
                             label.Text = GetColumnName(currentColumn + 1);
@@ -482,53 +356,29 @@ namespace SheetsApp
                 }
             }
 
-            // *** ВИПРАВЛЕННЯ №1: Використовуємо .Insert, а не .Add ***
             grid.ColumnDefinitions.Insert(newColumn, new ColumnDefinition { Width = GridLength.Auto });
 
-            // Створюємо новий заголовок стовпця
             var colLabel = CreateLabel(GetColumnName(newColumn), 0, newColumn);
             grid.Children.Add(colLabel);
 
-            // *** ВИПРАВЛЕННЯ №2: Правильний цикл для створення комірок ***
-            // Починаємо з рядка 1 (бо рядок 0 - це заголовки)
             for (int row = 1; row < grid.RowDefinitions.Count; row++)
             {
-                var entry = CreateCellEntry(row, newColumn); // Використовуємо 'row', а не 'row + 1'
+                var entry = CreateCellEntry(row, newColumn);
                 grid.Children.Add(entry);
             }
             isDirty = true;
+
+            RecalculateAllValues();
         }
-        /*{
-            foreach (var child in grid.Children)
-            {
-                int currentColumn = grid.GetColumn(child);
-                if (currentColumn > newColumn)
-                {
-                    if (child is Label label)
-                    {
-                        label.Text = GetColumnName(currentColumn + 1);
-                    }
-                    grid.SetColumn(child, currentColumn + 1);
-                }
-            }
-            //grid.ColumnDefinitions.Insert(newColumn+1, new ColumnDefinition { Width = GridLength.Auto });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
-            var colLabel = CreateLabel(GetColumnName(newColumn), 0, newColumn);
-            grid.Children.Add(colLabel);
-
-            for (int row = 0; row < grid.RowDefinitions.Count; row++)
-            {
-                var entry = CreateCellEntry(row + 1, newColumn);
-                grid.Children.Add(entry);
-            }
-            isDirty = true;
-        }*/
-        private void DeleteRow(int lastRowIndex)
+        private async void DeleteRow(int lastRowIndex)
         {
             if (lastRowIndex < 2)
             {
-                return;
+                if (lastRowIndex < 2)
+                {
+                    await DisplayAlert("Увага!", "Не можна видалити останній рядок.", "OK");
+                    return;
+                }
             }
 
             foreach (var key in cells.Keys.Where(k => k.Item1 == lastRowIndex).ToList())
@@ -555,13 +405,16 @@ namespace SheetsApp
             RemoveGridElements(child => grid.GetRow(child) == lastRowIndex);
             grid.RowDefinitions.RemoveAt(lastRowIndex);
             isDirty = true;
+
+            RecalculateAllValues();
         }
 
 
-        private void DeleteColumn(int lastColumnIndex)
+        private async void DeleteColumn(int lastColumnIndex)
         {
             if (lastColumnIndex < 2)
             {
+                await DisplayAlert("Увага!", "Не можна видалити останній стовпчик.", "OK");
                 return;
             }
 
@@ -589,65 +442,41 @@ namespace SheetsApp
             RemoveGridElements(child => grid.GetColumn(child) == lastColumnIndex);
             grid.ColumnDefinitions.RemoveAt(lastColumnIndex);
             isDirty = true;
+
+            RecalculateAllValues();
         }
 
 
         private void AddColumnsAndColumnLabels()
         {
-            // Стовпець 0 для заголовків рядків
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-            // Створюємо стовпці A-J (1-10)
-            for (int col = 1; col < CountColumn + 1; col++) // col іде від 1 до 10
+            for (int col = 1; col < CountColumn + 1; col++)
             {
                 grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
                 var colLabel = CreateLabel(GetColumnName(col), 0, col);
                 grid.Children.Add(colLabel);
             }
         }
-        /*{
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            for (int col = 1; col < CountColumn + 1; col++)
-            {
-                AddColumn(col);
-            }
-        }*/
+
         private void AddRowsAndCellEntries()
         {
-            // Рядок 0 для заголовків стовпців
             grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
-            // Створюємо рядки 1-10
-            for (int row = 1; row < CountRow + 1; row++) // row іде від 1 до 10
+            for (int row = 1; row < CountRow + 1; row++)
             {
                 grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
                 var rowLabel = CreateLabel(row.ToString(), row, 0);
                 grid.Children.Add(rowLabel);
 
-                // Відразу створюємо комірки (Entry) для цього рядка
-                // grid.ColumnDefinitions.Count буде 11 (0 + 10 стовпців)
-                for (int col = 1; col < grid.ColumnDefinitions.Count; col++) // col іде від 1 до 10
+                for (int col = 1; col < grid.ColumnDefinitions.Count; col++)
                 {
                     var entry = CreateCellEntry(row, col);
                     grid.Children.Add(entry);
                 }
             }
         }
-        /*{
-            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            for (int row = 1; row < CountRow + 1; row++)
-            {
-                AddRow(row);
-            }
-        }*/
-        private void ClearGrid()
-        {
-            var entries = grid.Children.OfType<Entry>().ToList();
-            foreach (var entry in entries)
-            {
-                entry.Text = string.Empty;
-            }
-        }
+
         private async Task<bool> SaveFile(CancellationToken cancellationToken)
         {
             try
@@ -680,7 +509,6 @@ namespace SheetsApp
                 return false;
             }
         }
-
 
         private async Task AskToSave()
         {
@@ -830,17 +658,15 @@ namespace SheetsApp
                 {
                     if (!string.IsNullOrEmpty(cell.Expression))
                     {
-                        var visitor = new SheetsAppVisitor(cells); // Створюємо візитор
-                        double numericValue = visitor.Eval(cell); // Отримуємо значення
+                        var visitor = new SheetsAppVisitor(cells);
+                        double numericValue = visitor.Eval(cell);
 
-                        // Перевіряємо, чи була це логічна операція
                         if (visitor.IsLastResultLogical)
                         {
                             cell.Value = (numericValue != 0) ? "ІСТИНА" : "ХИБА";
                         }
                         else
                         {
-                            // Інакше, це просто число
                             cell.Value = numericValue.ToString(System.Globalization.CultureInfo.InvariantCulture);
                         }
                     }
@@ -849,7 +675,6 @@ namespace SheetsApp
                         cell.Value = "";
                     }
                 }
-                // --- ОНОВЛЕНІ БЛОКИ CATCH ---
                 catch (CycleException ex)
                 {
                     cell.Value = "#ERROR";
@@ -858,23 +683,10 @@ namespace SheetsApp
                 {
                     cell.Value = "#REF_ERROR";
                 }
-                catch (Exception ex) // Для синтаксичних помилок / тексту
+                catch (Exception ex)
                 {
                     cell.Value = cell.Expression;
                 }
-                /*foreach (var cell in cells.Values)
-                {
-                    try
-                    {
-                        if (!string.IsNullOrEmpty(cell.Expression))
-                        {
-                            cell.Value = new SheetsAppVisitor(cells).Eval(cell).ToString();
-                        }
-                    }
-                    catch
-                    {
-                        cell.Value = "#ERROR";
-                    }*/
 
                 var cellCoords = cells.FirstOrDefault(kv => kv.Value == cell).Key;
                 var entry = GetEntryAt(cellCoords.Item1, cellCoords.Item2);
@@ -894,24 +706,13 @@ namespace SheetsApp
                 "Варіант 35. (1,3,5,8,10)\n+, -, *, / (бінарні операції)\n+, - (унарні операції)\ninc(), dec()\n=, <, >\nnot()",
             "OK");
         }
-        /*private async void ExitButton_Clicked(object sender, EventArgs e)
-        {
-            bool answer = await DisplayAlert("Підтвердження", "Ви дійсно хочете вийти?",
-            "Так", "Ні");
-            if (answer)
-            {
-                await AskToSave();
-                System.Environment.Exit(0);
-            }
-        }*/
+
         private async void ExitButton_Clicked(object sender, EventArgs e)
         {
-            // Просто викликаємо нашу нову загальну логіку
             await AttemptExitApp();
         }
         private async Task AttemptExitApp()
         {
-            // Якщо ми вже підтвердили вихід, не питати знову
             if (isClosing)
                 return;
 
@@ -920,37 +721,9 @@ namespace SheetsApp
             {
                 await AskToSave();
 
-                isClosing = true; // Встановлюємо прапорець
-                Application.Current.Quit(); // Коректний спосіб закрити MAUI додаток
+                isClosing = true;
+                Application.Current.Quit();
             }
         }
-        /*protected override void OnAppearing()
-        {
-            base.OnAppearing();
-            this.Window.Closing += OnWindowClosing;
-        }
-
-        protected override void OnDisappearing()
-        {
-            base.OnDisappearing();
-            this.Window.Closing -= OnWindowClosing;
-        }
-
-        private async void OnWindowClosing(object sender, WindowClosingEventArgs e)
-        {
-            // Якщо ми вже обробляємо вихід, просто даємо програмі закритися
-            if (isClosing)
-            {
-                return;
-            }
-
-            // 1. ЗАВЖДИ скасовуємо закриття.
-            // Це потрібно, бо ми не можемо "чекати" (await) на відповідь користувача
-            // всередині синхронної події.
-            e.Cancel = true;
-
-            // 2. Запускаємо нашу логіку виходу
-            await AttemptExitApp();
-        }*/
     }
 }
