@@ -148,83 +148,133 @@ namespace SheetsApp
 
             RecalculateAllValues();
         }
+        private string ProcessCell(Cell cell, SheetsAppVisitor visitor)
+        {
+            try
+            {
+                double numericValue = visitor.Eval(cell);
+
+                if (visitor.IsLastResultLogical)
+                {
+                    cell.Value = (numericValue != 0) ? "ІСТИНА" : "ХИБА";
+                }
+                else
+                {
+                    cell.Value = numericValue.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                }
+                return null;
+            }
+            catch (CycleException ex)
+            {
+                cell.Value = "#CYCERROR";
+                return ex.Message;
+            }
+            catch (CellNotFoundException ex)
+            {
+                cell.Value = "#REF_ERROR";
+                return ex.Message;
+            }
+            catch (Exception)
+            {
+                bool handled = false;
+                Antlr4.Runtime.Tree.IParseTree tree = null;
+
+                try
+                {
+                    var lexer = new SheetsLexer(new AntlrInputStream(cell.Expression));
+                    lexer.RemoveErrorListeners();
+                    lexer.AddErrorListener(ThrowingErrorListener.Instance);
+
+                    var tokens = new CommonTokenStream(lexer);
+                    var parser = new SheetsParser(tokens);
+
+                    parser.RemoveErrorListeners();
+                    parser.AddErrorListener(ThrowingErrorListener.Instance);
+
+                    tree = parser.expression();
+
+                    var tempTree = tree;
+                    while (tempTree is SheetsParser.EqualSignExprContext equalCtx)
+                    {
+                        tempTree = equalCtx.expression();
+                    }
+
+                    if (tempTree is SheetsParser.CellExprContext cellCtx)
+                    {
+                        string referencedCellName = cellCtx.GetText();
+                        var referencedCell = cells.Values.FirstOrDefault(c => c.Name == referencedCellName);
+                        if (referencedCell != null)
+                        {
+                            cell.Value = referencedCell.Value;
+                            handled = true;
+                        }
+                    }
+                }
+                catch
+                {
+                    tree = null;
+                }
+
+                if (!handled)
+                {
+                    string expr = cell.Expression.Trim().ToLower();
+                    bool startsWithKeyWord =
+                        expr.StartsWith("=") ||
+                        expr.StartsWith("not") ||
+                        expr.StartsWith("inc") ||
+                        expr.StartsWith("dec");
+
+                    bool isComplexFormula = false;
+
+                    if (tree != null)
+                    {
+                        bool isPrimitive =
+                            tree is SheetsParser.CellExprContext ||
+                            tree is SheetsParser.NumberExprContext;
+
+                        if (!isPrimitive)
+                        {
+                            isComplexFormula = true;
+                        }
+                    }
+
+                    if (isComplexFormula || startsWithKeyWord)
+                    {
+                        cell.Value = "#SYNERROR";
+                    }
+                    else
+                    {
+                        cell.Value = cell.Expression;
+                    }
+                }
+                return null;
+            }
+        }
         private void UpdateDependants(Cell cell)
         {
-            foreach (var dependant in cell.Dependents)
+            foreach (var dependant in cell.Dependents.ToList())
             {
                 if (visiting.Contains(dependant.Name))
                     continue;
 
                 visiting.Add(dependant.Name);
-                try
-                {
-                    var visitor = new SheetsAppVisitor(cells);
-                    double numericValue = visitor.Eval(dependant);
 
-                    if (visitor.IsLastResultLogical)
-                    {
-                        dependant.Value = (numericValue != 0) ? "ІСТИНА" : "ХИБА";
-                    }
-                    else
-                    {
-                        dependant.Value = numericValue.ToString(System.Globalization.CultureInfo.InvariantCulture);
-                    }
-                }
-                catch (CycleException ex)
-                {
-                    dependant.Value = "#ERROR";
-                }
-                catch (CellNotFoundException ex)
-                {
-                    dependant.Value = "#REF_ERROR";
-                }
-                catch (Exception ex)
-                {
-                    bool handledAsRef = false;
-                    try
-                    {
-                        var lexer = new SheetsLexer(new AntlrInputStream(dependant.Expression));
-                        var tokens = new CommonTokenStream(lexer);
-                        var parser = new SheetsParser(tokens);
-                        parser.RemoveErrorListeners();
-                        var tree = parser.expression();
-
-                        if (tree is SheetsParser.CellExprContext cellCtx)
-                        {
-                            string cellName = cellCtx.GetText();
-                            var referencedCell = cells.Values.FirstOrDefault(c => c.Name == cellName);
-                            if (referencedCell != null)
-                            {
-                                dependant.Value = referencedCell.Value;
-                                handledAsRef = true;
-                            }
-                        }
-                    }
-                    catch
-                    {
-                    }
-
-                    if (!handledAsRef)
-                    {
-                        dependant.Value = dependant.Expression;
-                    }
-                }
+                var visitor = new SheetsAppVisitor(cells);
+                ProcessCell(dependant, visitor);
 
                 var dependantCoords = cells.FirstOrDefault(kv => kv.Value == dependant).Key;
                 var entry = GetEntryAt(dependantCoords.Item1, dependantCoords.Item2);
                 if (entry != null)
                 {
                     entry.TextChanged -= OnEntryTextChanged;
-                    entry.Text = FormatForDisplay(dependant.Value); ;
+                    entry.Text = FormatForDisplay(dependant.Value);
                     entry.TextChanged += OnEntryTextChanged;
                 }
 
                 UpdateDependants(dependant);
-
                 visiting.Remove(dependant.Name);
             }
         }
-
         private void OnEntryFocused(object sender, FocusEventArgs e)
         {
             lastEntryFocused = (Entry)sender;
@@ -236,9 +286,10 @@ namespace SheetsApp
 
         private async void OnEntryUnfocused(object sender, FocusEventArgs e)
         {
-
             var entryLosingFocus = (Entry)sender;
             var cell = cells[(grid.GetRow(entryLosingFocus), grid.GetColumn(entryLosingFocus))];
+
+            string oldValue = cell.Value;
 
             foreach (var otherCell in cells.Values)
             {
@@ -251,66 +302,11 @@ namespace SheetsApp
             var visitor = new SheetsAppVisitor(cells);
             if (cell.Expression != "")
             {
-                try
-                {
-                    double numericValue = visitor.Eval(cell);
+                string errorMsg = ProcessCell(cell, visitor);
 
-                    if (visitor.IsLastResultLogical)
-                    {
-                        cell.Value = (numericValue != 0) ? "ІСТИНА" : "ХИБА";
-                    }
-                    else
-                    {
-                        cell.Value = numericValue.ToString(System.Globalization.CultureInfo.InvariantCulture);
-                    }
-                }
-                catch (CycleException ex)
+                if (errorMsg != null && cell.Value != oldValue)
                 {
-                    if (cell.Value != "#ERROR")
-                    {
-                        await DisplayAlert("Помилка", ex.Message, "OK");
-                        cell.Value = "#ERROR";
-                    }
-                }
-                catch (CellNotFoundException ex)
-                {
-                    if (cell.Value != "#REF_ERROR")
-                    {
-                        await DisplayAlert("Помилка", ex.Message, "OK");
-                    }
-                    cell.Value = "#REF_ERROR";
-                }
-                catch (Exception ex)
-                {
-
-                    bool handledAsRef = false;
-                    try
-                    {
-                        var lexer = new SheetsLexer(new AntlrInputStream(cell.Expression));
-                        var tokens = new CommonTokenStream(lexer);
-                        var parser = new SheetsParser(tokens);
-                        parser.RemoveErrorListeners();
-                        var tree = parser.expression();
-
-                        if (tree is SheetsParser.CellExprContext cellCtx)
-                        {
-                            string cellName = cellCtx.GetText();
-                            var referencedCell = cells.Values.FirstOrDefault(c => c.Name == cellName);
-                            if (referencedCell != null)
-                            {
-                                cell.Value = referencedCell.Value;
-                                handledAsRef = true;
-                            }
-                        }
-                    }
-                    catch
-                    {
-                    }
-
-                    if (!handledAsRef)
-                    {
-                        cell.Value = cell.Expression;
-                    }
+                    await DisplayAlert("Помилка", errorMsg, "OK");
                 }
             }
             else
@@ -376,7 +372,7 @@ namespace SheetsApp
             {
                 if (lastRowIndex < 2)
                 {
-                    await DisplayAlert("Увага!", "Не можна видалити останній рядок.", "OK");
+                    await DisplayAlert("⚠️Увага!", "Не можна видалити останній рядок.", "OK");
                     return;
                 }
             }
@@ -414,7 +410,7 @@ namespace SheetsApp
         {
             if (lastColumnIndex < 2)
             {
-                await DisplayAlert("Увага!", "Не можна видалити останній стовпчик.", "OK");
+                await DisplayAlert("⚠️Увага!", "Не можна видалити останній стовпчик.", "OK");
                 return;
             }
 
@@ -649,43 +645,18 @@ namespace SheetsApp
             }
         }
 
-
         private void RecalculateAllValues()
         {
+            var visitor = new SheetsAppVisitor(cells);
             foreach (var cell in cells.Values)
             {
-                try
+                if (!string.IsNullOrEmpty(cell.Expression))
                 {
-                    if (!string.IsNullOrEmpty(cell.Expression))
-                    {
-                        var visitor = new SheetsAppVisitor(cells);
-                        double numericValue = visitor.Eval(cell);
-
-                        if (visitor.IsLastResultLogical)
-                        {
-                            cell.Value = (numericValue != 0) ? "ІСТИНА" : "ХИБА";
-                        }
-                        else
-                        {
-                            cell.Value = numericValue.ToString(System.Globalization.CultureInfo.InvariantCulture);
-                        }
-                    }
-                    else
-                    {
-                        cell.Value = "";
-                    }
+                    ProcessCell(cell, visitor);
                 }
-                catch (CycleException ex)
+                else
                 {
-                    cell.Value = "#ERROR";
-                }
-                catch (CellNotFoundException ex)
-                {
-                    cell.Value = "#REF_ERROR";
-                }
-                catch (Exception ex)
-                {
-                    cell.Value = cell.Expression;
+                    cell.Value = "";
                 }
 
                 var cellCoords = cells.FirstOrDefault(kv => kv.Value == cell).Key;
@@ -699,12 +670,20 @@ namespace SheetsApp
             }
         }
 
-
         private async void HelpButton_Clicked(object sender, EventArgs e)
         {
-            await DisplayAlert("Довідка", "Лабораторна робота з ООП №1\nСтудента групи К27\nКучера Ярослава\n" +
-                "Варіант 35. (1,3,5,8,10)\n+, -, *, / (бінарні операції)\n+, - (унарні операції)\ninc(), dec()\n=, <, >\nnot()",
-            "OK");
+            await DisplayAlert("Довідка",
+        "Лабораторна робота з ООП №1\n" +
+        "Студента групи К27 Кучера Ярослава\n" +
+        "Варіант 35. (1,3,5,8,10)\n\n" +
+        "Операції:\n" +
+        "+, -, *, / (бінарні)\n" +
+        "+, - (унарні)\n" +
+        "inc(), dec()\n" +
+        "=, <, >\n" +
+        "not()\n\n" +
+        "⚠️ВАЖЛИВО: назви функцій (inc, dec, not) вводяться виключно малими літерами!",
+        "OK");
         }
 
         private async void ExitButton_Clicked(object sender, EventArgs e)

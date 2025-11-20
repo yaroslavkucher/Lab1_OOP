@@ -34,21 +34,37 @@ namespace SheetsApp
         {
             this.cells = new List<Cell>(cells.Values);
         }
+
+
         public double Eval(Cell cell)
         {
+            var previousCell = currentCell;
             currentCell = cell;
             IsLastResultLogical = false;
 
-            var inputStream = new AntlrInputStream(cell.Expression);
-            var lexer = new SheetsLexer(inputStream);
-            lexer.RemoveErrorListeners();
-            lexer.AddErrorListener(ThrowingErrorListener.Instance);
-            var tokens = new CommonTokenStream(lexer);
-            var parser = new SheetsParser(tokens);
-            parser.RemoveErrorListeners();
-            parser.AddErrorListener(ThrowingErrorListener.Instance);
-            var tree = parser.expression();
-            return Visit(tree);
+            try
+            {
+                var inputStream = new AntlrInputStream(cell.Expression);
+                var lexer = new SheetsLexer(inputStream);
+                lexer.RemoveErrorListeners();
+                lexer.AddErrorListener(ThrowingErrorListener.Instance);
+                var tokens = new CommonTokenStream(lexer);
+                var parser = new SheetsParser(tokens);
+                parser.RemoveErrorListeners();
+                parser.AddErrorListener(ThrowingErrorListener.Instance);
+                var tree = parser.expression();
+
+                if (tokens.LA(1) != Antlr4.Runtime.TokenConstants.EOF)
+                {
+                    throw new Exception($"Помилка синтаксису: зайві символи після виразу ('{tokens.LT(1).Text}')");
+                }
+
+                return Visit(tree);
+            }
+            finally
+            {
+                currentCell = previousCell;
+            }
         }
 
         public override double VisitMultiplyExpr(SheetsParser.MultiplyExprContext context)
@@ -217,7 +233,6 @@ namespace SheetsApp
             }
             catch
             {
-                evaluatedValues[cellName] = double.NaN;
                 throw;
             }
             finally
